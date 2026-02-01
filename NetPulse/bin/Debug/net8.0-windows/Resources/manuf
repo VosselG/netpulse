@@ -1,0 +1,17 @@
+# NetPulse starter manuf file (Wireshark "manuf" format)
+#
+# This is a SMALL starter set so vendor lookup works end-to-end.
+# For best results, replace this file with the full Wireshark manuf database.
+# (Search "Wireshark manuf file" and use the official latest copy.)
+#
+# Format:
+# <OUI or prefix> <shortName> <longName...>
+#
+# Examples:
+# 00:00:0C        Cisco       Cisco Systems, Inc
+# B8:27:EB        RPi         Raspberry Pi (Trading) Ltd
+
+00:00:0C        Cisco       Cisco Systems, Inc
+B8:27:EB        RPi         Raspberry Pi (Trading) Ltd
+DC:A6:32        RPi         Raspberry Pi (Trading) Ltd
+AA:BB:CC    TestVendor      Test Vendor Inc

@@ -18,6 +18,7 @@ public partial class MainViewModel : ObservableObject
     private readonly IPersistenceService _persistenceService;
     private readonly IScannerService _scannerService;
     private readonly IDnsService _dnsService;
+    private readonly IVendorLookupService _vendorLookupService;
 
     private CancellationTokenSource? _monitoringCts;
     private Task? _monitoringTask;
@@ -75,11 +76,16 @@ public partial class MainViewModel : ObservableObject
 
     private bool _syncingSelection;
 
-    public MainViewModel(IPersistenceService persistenceService, IScannerService scannerService, IDnsService dnsService)
+    public MainViewModel(
+        IPersistenceService persistenceService,
+        IScannerService scannerService,
+        IDnsService dnsService,
+        IVendorLookupService vendorLookupService)
     {
         _persistenceService = persistenceService;
         _scannerService = scannerService;
         _dnsService = dnsService;
+        _vendorLookupService = vendorLookupService;
 
         OnlineDevicesView = new ListCollectionView(Devices)
         {
@@ -328,6 +334,8 @@ public partial class MainViewModel : ObservableObject
         int? LatencyMs,
         string? ResolvedHostname,
         bool HostnameAttempted,
+        string? ResolvedVendor,
+        bool VendorAttempted,
         DateTime TimestampUtc);
 
     private async Task MonitoringLoopAsync(CancellationToken cancellationToken)
@@ -381,7 +389,9 @@ public partial class MainViewModel : ObservableObject
                                     LatencyMs: null,
                                     ResolvedHostname: null,
                                     HostnameAttempted: false,
-                                    timestampUtc));
+                                    ResolvedVendor: null,
+                                    VendorAttempted: false,
+                                    TimestampUtc: timestampUtc));
                                 return;
                             }
 
@@ -402,7 +412,9 @@ public partial class MainViewModel : ObservableObject
                                     LatencyMs: null,
                                     ResolvedHostname: null,
                                     HostnameAttempted: false,
-                                    timestampUtc));
+                                    ResolvedVendor: null,
+                                    VendorAttempted: false,
+                                    TimestampUtc: timestampUtc));
                                 return;
                             }
 
@@ -420,6 +432,18 @@ public partial class MainViewModel : ObservableObject
                                 resolvedHostname = await _dnsService.ReverseLookupAsync(ip, DnsTimeout, ct).ConfigureAwait(false);
                             }
 
+                            // Vendor lookup is local and cheap; attempt once for missing vendors.
+                            string? resolvedVendor = null;
+                            var vendorAttempted = false;
+
+                            if (string.IsNullOrWhiteSpace(device.Vendor) &&
+                                device.LastVendorLookupAttemptUtc == DateTime.MinValue &&
+                                !string.IsNullOrWhiteSpace(resolvedMac))
+                            {
+                                vendorAttempted = true;
+                                resolvedVendor = _vendorLookupService.TryGetVendor(resolvedMac);
+                            }
+
                             updates.Add(new HeartbeatUpdate(
                                 device,
                                 IsPresent: true,
@@ -427,7 +451,9 @@ public partial class MainViewModel : ObservableObject
                                 LatencyMs: latencyMs,
                                 ResolvedHostname: resolvedHostname,
                                 HostnameAttempted: hostnameAttempted,
-                                timestampUtc));
+                                ResolvedVendor: resolvedVendor,
+                                VendorAttempted: vendorAttempted,
+                                TimestampUtc: timestampUtc));
                         }
                         catch (OperationCanceledException)
                         {
@@ -443,7 +469,9 @@ public partial class MainViewModel : ObservableObject
                                 LatencyMs: null,
                                 ResolvedHostname: null,
                                 HostnameAttempted: false,
-                                timestampUtc));
+                                ResolvedVendor: null,
+                                VendorAttempted: false,
+                                TimestampUtc: timestampUtc));
                         }
                     }).ConfigureAwait(false);
 
@@ -468,6 +496,13 @@ public partial class MainViewModel : ObservableObject
                             // Never overwrite an existing hostname. Only fill if currently blank.
                             if (string.IsNullOrWhiteSpace(u.Device.Hostname) && !string.IsNullOrWhiteSpace(u.ResolvedHostname))
                                 u.Device.Hostname = u.ResolvedHostname;
+
+                            // Vendor: attempt once (mark attempt time even if not found), never overwrite existing Vendor.
+                            if (u.VendorAttempted)
+                                u.Device.LastVendorLookupAttemptUtc = u.TimestampUtc;
+
+                            if (string.IsNullOrWhiteSpace(u.Device.Vendor) && !string.IsNullOrWhiteSpace(u.ResolvedVendor))
+                                u.Device.Vendor = u.ResolvedVendor;
 
                             if (u.IsPresent)
                             {

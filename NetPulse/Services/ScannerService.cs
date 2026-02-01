@@ -15,6 +15,7 @@ namespace NetPulse.Services;
 public sealed class ScannerService : IScannerService
 {
     private readonly IDnsService _dnsService;
+    private readonly IVendorLookupService _vendorLookupService;
 
     // Ping is "best effort" here. Many devices block ICMP.
     private const int DefaultPingTimeoutMs = 1500;
@@ -32,9 +33,10 @@ public sealed class ScannerService : IScannerService
     // Guardrail to prevent accidental huge scans (/16, etc.).
     private const int MaxHostsToScan = 4096;
 
-    public ScannerService(IDnsService dnsService)
+    public ScannerService(IDnsService dnsService, IVendorLookupService vendorLookupService)
     {
         _dnsService = dnsService;
+        _vendorLookupService = vendorLookupService;
     }
 
     public async Task<IReadOnlyList<NetworkDevice>> DiscoverAsync(
@@ -71,6 +73,8 @@ public sealed class ScannerService : IScannerService
                     var mac = await TryResolveMacWithTimeoutAsync(ip, ct).ConfigureAwait(false);
                     if (!string.IsNullOrWhiteSpace(mac))
                     {
+                        var vendor = _vendorLookupService.TryGetVendor(mac) ?? string.Empty;
+
                         // Run Ping + reverse DNS concurrently (both best-effort).
                         var latencyTask = TryPingLatencyMsAsync(
                             ip,
@@ -87,6 +91,7 @@ public sealed class ScannerService : IScannerService
                         {
                             MacAddress = mac,
                             IpAddress = ip.ToString(),
+                            Vendor = vendor,
                             Hostname = hostname ?? string.Empty,
                             IsOnline = true,
                             LastSeen = DateTime.UtcNow,

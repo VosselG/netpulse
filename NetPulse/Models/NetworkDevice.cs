@@ -38,6 +38,9 @@ public partial class NetworkDevice : ObservableObject
     public DateTime LastHostnameResolveAttemptUtc { get; set; } = DateTime.MinValue;
 
     [JsonIgnore]
+    public DateTime LastVendorLookupAttemptUtc { get; set; } = DateTime.MinValue;
+
+    [JsonIgnore]
     public ObservableCollection<PingPoint> PingHistory { get; } = new();
 
     [JsonIgnore]

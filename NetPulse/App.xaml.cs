@@ -61,6 +61,7 @@ public partial class App : Application
         services.AddSingleton<IPersistenceService, PersistenceService>();
 
         services.AddSingleton<IDnsService, DnsService>();
+        services.AddSingleton<IVendorLookupService, VendorLookupService>();
 
         services.AddSingleton<IScannerService, ScannerService>();
 

@@ -49,3 +49,5 @@ C:\Users\taifalbadri\Desktop\proj_scanner\NetPulse\obj\Debug\net8.0-windows\refi
 C:\Users\taifalbadri\Desktop\proj_scanner\NetPulse\obj\Debug\net8.0-windows\NetPulse.pdb
 C:\Users\taifalbadri\Desktop\proj_scanner\NetPulse\obj\Debug\net8.0-windows\NetPulse.genruntimeconfig.cache
 C:\Users\taifalbadri\Desktop\proj_scanner\NetPulse\obj\Debug\net8.0-windows\ref\NetPulse.dll
+C:\Users\taifalbadri\Desktop\proj_scanner\NetPulse\obj\Debug\net8.0-windows\NetPulse_Content.g.cs
+C:\Users\taifalbadri\Desktop\proj_scanner\NetPulse\bin\Debug\net8.0-windows\Resources\manuf
