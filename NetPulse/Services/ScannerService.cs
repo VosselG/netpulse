@@ -14,6 +14,8 @@ namespace NetPulse.Services;
 /// </summary>
 public sealed class ScannerService : IScannerService
 {
+    private readonly IDnsService _dnsService;
+
     // Ping is "best effort" here. Many devices block ICMP.
     private const int DefaultPingTimeoutMs = 1500;
     private const int DefaultPingRetries = 1;
@@ -24,8 +26,16 @@ public sealed class ScannerService : IScannerService
     // ARP is synchronous; wrap each attempt and enforce a timeout.
     private static readonly TimeSpan ArpTimeout = TimeSpan.FromMilliseconds(800);
 
+    // Reverse DNS can be slow/hang; cap it.
+    private static readonly TimeSpan DnsTimeout = TimeSpan.FromMilliseconds(2000);
+
     // Guardrail to prevent accidental huge scans (/16, etc.).
     private const int MaxHostsToScan = 4096;
+
+    public ScannerService(IDnsService dnsService)
+    {
+        _dnsService = dnsService;
+    }
 
     public async Task<IReadOnlyList<NetworkDevice>> DiscoverAsync(
         IProgress<ScanProgress>? progress,
@@ -61,18 +71,23 @@ public sealed class ScannerService : IScannerService
                     var mac = await TryResolveMacWithTimeoutAsync(ip, ct).ConfigureAwait(false);
                     if (!string.IsNullOrWhiteSpace(mac))
                     {
-                        // Ping is best-effort for latency; device is still "online" if ARP succeeded.
-                        var latencyMs = await TryPingLatencyMsAsync(
-                                ip,
-                                timeoutMs: DefaultPingTimeoutMs,
-                                retries: DefaultPingRetries,
-                                ct)
-                            .ConfigureAwait(false);
+                        // Run Ping + reverse DNS concurrently (both best-effort).
+                        var latencyTask = TryPingLatencyMsAsync(
+                            ip,
+                            timeoutMs: DefaultPingTimeoutMs,
+                            retries: DefaultPingRetries,
+                            ct);
+
+                        var hostnameTask = _dnsService.ReverseLookupAsync(ip, DnsTimeout, ct);
+
+                        var latencyMs = await latencyTask.ConfigureAwait(false);
+                        var hostname = await hostnameTask.ConfigureAwait(false);
 
                         results.Add(new NetworkDevice
                         {
                             MacAddress = mac,
                             IpAddress = ip.ToString(),
+                            Hostname = hostname ?? string.Empty,
                             IsOnline = true,
                             LastSeen = DateTime.UtcNow,
                             LastLatencyMs = latencyMs
@@ -86,12 +101,13 @@ public sealed class ScannerService : IScannerService
                 }
             }).ConfigureAwait(false);
 
-        // De-duplicate by MAC (one device identity), prefer entries that have latency (if any).
+        // De-duplicate by MAC (one device identity), prefer entries that have hostname and/or latency.
         var deduped = results
             .Where(d => !string.IsNullOrWhiteSpace(d.MacAddress))
             .GroupBy(d => d.MacAddress, StringComparer.OrdinalIgnoreCase)
             .Select(g =>
-                g.OrderByDescending(d => d.LastLatencyMs.HasValue) // prefer pingable
+                g.OrderByDescending(d => !string.IsNullOrWhiteSpace(d.Hostname)) // prefer named
+                 .ThenByDescending(d => d.LastLatencyMs.HasValue)               // prefer pingable
                  .ThenByDescending(d => d.LastSeen)
                  .First())
             .OrderBy(d => IPv4ToUInt32(IPAddress.Parse(d.IpAddress)))

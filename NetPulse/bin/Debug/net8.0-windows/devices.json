@@ -121,7 +121,7 @@
     "IpAddress": "10.56.201.96",
     "Vendor": "",
     "Hostname": "",
-    "LastSeen": "2026-02-01T04:34:47.6754549Z",
+    "LastSeen": "2026-02-01T05:00:26.6812402Z",
     "IsOnline": true,
     "LastLatencyMs": 1
   },
@@ -130,7 +130,7 @@
     "IpAddress": "10.56.201.174",
     "Vendor": "",
     "Hostname": "",
-    "LastSeen": "2026-02-01T04:34:47.6754549Z",
+    "LastSeen": "2026-02-01T05:00:26.6812402Z",
     "IsOnline": true,
     "LastLatencyMs": 0
   }

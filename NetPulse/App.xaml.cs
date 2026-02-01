@@ -60,7 +60,8 @@ public partial class App : Application
     {
         services.AddSingleton<IPersistenceService, PersistenceService>();
 
-        // Scanner is stubbed for scaffolding (real implementation comes later)
+        services.AddSingleton<IDnsService, DnsService>();
+
         services.AddSingleton<IScannerService, ScannerService>();
 
         services.AddSingleton<MainViewModel>();

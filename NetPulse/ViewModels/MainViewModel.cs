@@ -17,6 +17,7 @@ public partial class MainViewModel : ObservableObject
 {
     private readonly IPersistenceService _persistenceService;
     private readonly IScannerService _scannerService;
+    private readonly IDnsService _dnsService;
 
     private CancellationTokenSource? _monitoringCts;
     private Task? _monitoringTask;
@@ -29,6 +30,9 @@ public partial class MainViewModel : ObservableObject
     private const int MonitoringMaxDegreeOfParallelism = 32;
 
     private static readonly TimeSpan ArpTimeout = TimeSpan.FromMilliseconds(800);
+    private static readonly TimeSpan DnsTimeout = TimeSpan.FromMilliseconds(2000);
+    private static readonly TimeSpan HostnameResolveMinInterval = TimeSpan.FromMinutes(5);
+
     private const int HeartbeatPingTimeoutMs = 1000;
     private const int HeartbeatPingRetries = 0;
 
@@ -71,10 +75,11 @@ public partial class MainViewModel : ObservableObject
 
     private bool _syncingSelection;
 
-    public MainViewModel(IPersistenceService persistenceService, IScannerService scannerService)
+    public MainViewModel(IPersistenceService persistenceService, IScannerService scannerService, IDnsService dnsService)
     {
         _persistenceService = persistenceService;
         _scannerService = scannerService;
+        _dnsService = dnsService;
 
         OnlineDevicesView = new ListCollectionView(Devices)
         {
@@ -321,6 +326,8 @@ public partial class MainViewModel : ObservableObject
         bool IsPresent,
         string? ResolvedMac,
         int? LatencyMs,
+        string? ResolvedHostname,
+        bool HostnameAttempted,
         DateTime TimestampUtc);
 
     private async Task MonitoringLoopAsync(CancellationToken cancellationToken)
@@ -367,7 +374,14 @@ public partial class MainViewModel : ObservableObject
                             if (string.IsNullOrWhiteSpace(device.IpAddress) ||
                                 !IPAddress.TryParse(device.IpAddress.Trim(), out var ip))
                             {
-                                updates.Add(new HeartbeatUpdate(device, IsPresent: false, ResolvedMac: null, LatencyMs: null, timestampUtc));
+                                updates.Add(new HeartbeatUpdate(
+                                    device,
+                                    IsPresent: false,
+                                    ResolvedMac: null,
+                                    LatencyMs: null,
+                                    ResolvedHostname: null,
+                                    HostnameAttempted: false,
+                                    timestampUtc));
                                 return;
                             }
 
@@ -381,14 +395,39 @@ public partial class MainViewModel : ObservableObject
 
                             if (!macMatches)
                             {
-                                updates.Add(new HeartbeatUpdate(device, IsPresent: false, ResolvedMac: resolvedMac, LatencyMs: null, timestampUtc));
+                                updates.Add(new HeartbeatUpdate(
+                                    device,
+                                    IsPresent: false,
+                                    ResolvedMac: resolvedMac,
+                                    LatencyMs: null,
+                                    ResolvedHostname: null,
+                                    HostnameAttempted: false,
+                                    timestampUtc));
                                 return;
                             }
 
-                            // Present via ARP. Now attempt Ping for latency (best-effort).
+                            // Present via ARP. Attempt Ping for latency (best-effort).
                             var latencyMs = await TryPingLatencyMsAsync(ip, HeartbeatPingTimeoutMs, HeartbeatPingRetries, ct).ConfigureAwait(false);
 
-                            updates.Add(new HeartbeatUpdate(device, IsPresent: true, ResolvedMac: resolvedMac, LatencyMs: latencyMs, timestampUtc));
+                            // Lazy reverse DNS: only if hostname missing and throttle allows.
+                            string? resolvedHostname = null;
+                            var hostnameAttempted = false;
+
+                            if (string.IsNullOrWhiteSpace(device.Hostname) &&
+                                (timestampUtc - device.LastHostnameResolveAttemptUtc) >= HostnameResolveMinInterval)
+                            {
+                                hostnameAttempted = true;
+                                resolvedHostname = await _dnsService.ReverseLookupAsync(ip, DnsTimeout, ct).ConfigureAwait(false);
+                            }
+
+                            updates.Add(new HeartbeatUpdate(
+                                device,
+                                IsPresent: true,
+                                ResolvedMac: resolvedMac,
+                                LatencyMs: latencyMs,
+                                ResolvedHostname: resolvedHostname,
+                                HostnameAttempted: hostnameAttempted,
+                                timestampUtc));
                         }
                         catch (OperationCanceledException)
                         {
@@ -397,7 +436,14 @@ public partial class MainViewModel : ObservableObject
                         catch
                         {
                             // Treat unexpected errors as a miss for this tick.
-                            updates.Add(new HeartbeatUpdate(device, IsPresent: false, ResolvedMac: null, LatencyMs: null, timestampUtc));
+                            updates.Add(new HeartbeatUpdate(
+                                device,
+                                IsPresent: false,
+                                ResolvedMac: null,
+                                LatencyMs: null,
+                                ResolvedHostname: null,
+                                HostnameAttempted: false,
+                                timestampUtc));
                         }
                     }).ConfigureAwait(false);
 
@@ -414,6 +460,14 @@ public partial class MainViewModel : ObservableObject
                             // Upgrade IP-only persisted entries to include MAC once we learn it.
                             if (!string.IsNullOrWhiteSpace(u.ResolvedMac) && string.IsNullOrWhiteSpace(u.Device.MacAddress))
                                 u.Device.MacAddress = u.ResolvedMac;
+
+                            // Record hostname attempt time whether it succeeded or not (throttle).
+                            if (u.HostnameAttempted)
+                                u.Device.LastHostnameResolveAttemptUtc = u.TimestampUtc;
+
+                            // Never overwrite an existing hostname. Only fill if currently blank.
+                            if (string.IsNullOrWhiteSpace(u.Device.Hostname) && !string.IsNullOrWhiteSpace(u.ResolvedHostname))
+                                u.Device.Hostname = u.ResolvedHostname;
 
                             if (u.IsPresent)
                             {

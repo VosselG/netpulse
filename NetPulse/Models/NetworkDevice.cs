@@ -35,6 +35,9 @@ public partial class NetworkDevice : ObservableObject
     public int ConsecutiveMisses { get; set; } = 0;
 
     [JsonIgnore]
+    public DateTime LastHostnameResolveAttemptUtc { get; set; } = DateTime.MinValue;
+
+    [JsonIgnore]
     public ObservableCollection<PingPoint> PingHistory { get; } = new();
 
     [JsonIgnore]
