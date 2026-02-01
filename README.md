@@ -1,7 +1,3 @@
-File: `README.md`  
-Patch #: 1 - Add comprehensive README (new)
-
-```markdown
 # NetPulse
 
 NetPulse is a Windows desktop app (WPF, .NET 8) for discovering devices on your local network and monitoring their connectivity in real time. It provides a dark-mode dashboard with device cards, a detail sidebar, and a live latency graph.
@@ -185,4 +181,3 @@ Prune criteria:
 
 ## License
 Choose a license before publishing (e.g., MIT). Currently: not specified.
-```
