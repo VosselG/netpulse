@@ -3,11 +3,13 @@ using System.Collections.ObjectModel;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Windows;
+using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using NetPulse.Infrastructure;
 using NetPulse.Models;
 using NetPulse.Services;
+using System.ComponentModel;
 
 namespace NetPulse.ViewModels;
 
@@ -19,7 +21,9 @@ public partial class MainViewModel : ObservableObject
     private CancellationTokenSource? _monitoringCts;
     private Task? _monitoringTask;
 
-    private const int OfflineAfterConsecutiveMisses = 3;
+    // Requested change: reduce flapping
+    private const int OfflineAfterConsecutiveMisses = 10;
+
     private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(2);
 
     private const int MonitoringMaxDegreeOfParallelism = 32;
@@ -31,6 +35,24 @@ public partial class MainViewModel : ObservableObject
     private const int PingHistoryMaxPoints = 60;
 
     public ObservableCollection<NetworkDevice> Devices { get; } = new();
+
+    // Two filtered/sorted views for the UI.
+    public ICollectionView OnlineDevicesView { get; }
+    public ICollectionView OfflineDevicesView { get; }
+
+    [ObservableProperty]
+    private bool hasOnlineDevices;
+
+    [ObservableProperty]
+    private bool hasOfflineDevices;
+
+    // IMPORTANT: Do not bind both ListBoxes directly to SelectedDevice.
+    // They will fight and can clear selection because the selected item isn't in the other list.
+    [ObservableProperty]
+    private NetworkDevice? onlineSelectedDevice;
+
+    [ObservableProperty]
+    private NetworkDevice? offlineSelectedDevice;
 
     [ObservableProperty]
     private NetworkDevice? selectedDevice;
@@ -47,10 +69,183 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private string scanStatusText = string.Empty;
 
+    private bool _syncingSelection;
+
     public MainViewModel(IPersistenceService persistenceService, IScannerService scannerService)
     {
         _persistenceService = persistenceService;
         _scannerService = scannerService;
+
+        OnlineDevicesView = new ListCollectionView(Devices)
+        {
+            Filter = o => o is NetworkDevice d && d.IsOnline
+        };
+
+        OfflineDevicesView = new ListCollectionView(Devices)
+        {
+            Filter = o => o is NetworkDevice d && !d.IsOnline
+        };
+
+        if (OnlineDevicesView is ListCollectionView onlineLcv)
+            onlineLcv.CustomSort = new DeviceIpComparer();
+
+        if (OfflineDevicesView is ListCollectionView offlineLcv)
+            offlineLcv.CustomSort = new DeviceIpComparer();
+    }
+
+    partial void OnOnlineSelectedDeviceChanged(NetworkDevice? value)
+    {
+        if (_syncingSelection)
+            return;
+
+        _syncingSelection = true;
+        try
+        {
+            if (value is not null)
+            {
+                SelectedDevice = value;
+                if (OfflineSelectedDevice is not null)
+                    OfflineSelectedDevice = null;
+            }
+            else
+            {
+                // If the online selection cleared and there is no offline selection, clear SelectedDevice.
+                if (OfflineSelectedDevice is null && SelectedDevice is not null && SelectedDevice.IsOnline)
+                    SelectedDevice = null;
+            }
+        }
+        finally
+        {
+            _syncingSelection = false;
+        }
+    }
+
+    partial void OnOfflineSelectedDeviceChanged(NetworkDevice? value)
+    {
+        if (_syncingSelection)
+            return;
+
+        _syncingSelection = true;
+        try
+        {
+            if (value is not null)
+            {
+                SelectedDevice = value;
+                if (OnlineSelectedDevice is not null)
+                    OnlineSelectedDevice = null;
+            }
+            else
+            {
+                // If the offline selection cleared and there is no online selection, clear SelectedDevice.
+                if (OnlineSelectedDevice is null && SelectedDevice is not null && !SelectedDevice.IsOnline)
+                    SelectedDevice = null;
+            }
+        }
+        finally
+        {
+            _syncingSelection = false;
+        }
+    }
+
+    partial void OnSelectedDeviceChanged(NetworkDevice? value)
+    {
+        if (_syncingSelection)
+            return;
+
+        _syncingSelection = true;
+        try
+        {
+            if (value is null)
+            {
+                OnlineSelectedDevice = null;
+                OfflineSelectedDevice = null;
+                return;
+            }
+
+            if (value.IsOnline)
+            {
+                OnlineSelectedDevice = value;
+                OfflineSelectedDevice = null;
+            }
+            else
+            {
+                OfflineSelectedDevice = value;
+                OnlineSelectedDevice = null;
+            }
+        }
+        finally
+        {
+            _syncingSelection = false;
+        }
+    }
+
+    private sealed class DeviceIpComparer : System.Collections.IComparer
+    {
+        public int Compare(object? x, object? y)
+        {
+            var a = x as NetworkDevice;
+            var b = y as NetworkDevice;
+            if (a is null || b is null)
+                return 0;
+
+            var au = TryParseIPv4ToUInt32(a.IpAddress);
+            var bu = TryParseIPv4ToUInt32(b.IpAddress);
+
+            if (au.HasValue && bu.HasValue)
+                return au.Value.CompareTo(bu.Value);
+
+            return string.Compare(a.IpAddress, b.IpAddress, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static uint? TryParseIPv4ToUInt32(string? ipString)
+        {
+            if (string.IsNullOrWhiteSpace(ipString))
+                return null;
+
+            if (!IPAddress.TryParse(ipString.Trim(), out var ip))
+                return null;
+
+            var bytes = ip.GetAddressBytes();
+            if (bytes.Length != 4)
+                return null;
+
+            return ((uint)bytes[0] << 24)
+                 | ((uint)bytes[1] << 16)
+                 | ((uint)bytes[2] << 8)
+                 | bytes[3];
+        }
+    }
+
+    private void RefreshViewsAndSectionState()
+    {
+        OnlineDevicesView.Refresh();
+        OfflineDevicesView.Refresh();
+
+        HasOnlineDevices = Devices.Any(d => d.IsOnline);
+        HasOfflineDevices = Devices.Any(d => !d.IsOnline);
+
+        // If a selected device changed online/offline state, keep selection highlight in the right section.
+        if (SelectedDevice is not null)
+        {
+            _syncingSelection = true;
+            try
+            {
+                if (SelectedDevice.IsOnline)
+                {
+                    OnlineSelectedDevice = SelectedDevice;
+                    OfflineSelectedDevice = null;
+                }
+                else
+                {
+                    OfflineSelectedDevice = SelectedDevice;
+                    OnlineSelectedDevice = null;
+                }
+            }
+            finally
+            {
+                _syncingSelection = false;
+            }
+        }
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
@@ -72,6 +267,7 @@ public partial class MainViewModel : ObservableObject
         ScanProgressPercent = 0;
         ScanStatusText = string.Empty;
 
+        RefreshViewsAndSectionState();
         StartMonitoring();
     }
 
@@ -106,7 +302,7 @@ public partial class MainViewModel : ObservableObject
 
             // Best effort: don't hang shutdown forever.
             var completed = await Task.WhenAny(_monitoringTask, Task.Delay(TimeSpan.FromSeconds(2), cancellationToken));
-            _ = completed; // (intentionally ignored)
+            _ = completed; // intentionally ignored
         }
         catch
         {
@@ -175,7 +371,7 @@ public partial class MainViewModel : ObservableObject
                                 return;
                             }
 
-                            // Online definition (your choice): online if ARP succeeds (identity-aware via MAC).
+                            // Online definition: online if ARP succeeds (identity-aware via MAC).
                             var resolvedMac = await TryResolveMacWithTimeoutAsync(ip, ct).ConfigureAwait(false);
 
                             var macMatches =
@@ -212,7 +408,6 @@ public partial class MainViewModel : ObservableObject
                     {
                         foreach (var u in updates)
                         {
-                            // Device might have been deleted since snapshot.
                             if (!Devices.Contains(u.Device))
                                 continue;
 
@@ -247,6 +442,8 @@ public partial class MainViewModel : ObservableObject
                                 }
                             }
                         }
+
+                        RefreshViewsAndSectionState();
                     });
                 }
                 catch
@@ -327,6 +524,8 @@ public partial class MainViewModel : ObservableObject
             foreach (var d in Devices)
                 d.IsOnline = false;
 
+            RefreshViewsAndSectionState();
+
             var progress = new Progress<ScanProgress>(p =>
             {
                 if (p.Total <= 0)
@@ -360,7 +559,7 @@ public partial class MainViewModel : ObservableObject
             foreach (var found in results)
             {
                 if (string.IsNullOrWhiteSpace(found.MacAddress))
-                    continue; // ARP discovery should always yield MAC, but be defensive.
+                    continue;
 
                 var macKey = found.MacAddress.Trim();
 
@@ -397,11 +596,12 @@ public partial class MainViewModel : ObservableObject
                     existing.Vendor = found.Vendor;
 
                 existing.LastLatencyMs = found.LastLatencyMs;
-
                 existing.LastSeen = found.LastSeen == DateTime.MinValue ? DateTime.UtcNow : found.LastSeen;
                 existing.IsOnline = true;
                 existing.ConsecutiveMisses = 0;
             }
+
+            RefreshViewsAndSectionState();
 
             ScanProgressPercent = 100;
             ScanStatusText = "Scan complete";
@@ -424,5 +624,7 @@ public partial class MainViewModel : ObservableObject
 
         Devices.Remove(SelectedDevice);
         SelectedDevice = null;
+
+        RefreshViewsAndSectionState();
     }
 }

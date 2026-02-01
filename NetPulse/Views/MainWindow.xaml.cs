@@ -24,4 +24,23 @@ public partial class MainWindow : Window
         if (dep is ListBoxItem item)
             item.IsSelected = true;
     }
+
+    private void DevicesList_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        // Forward wheel scrolling from inner ListBoxes to the outer ScrollViewer so the wheel
+        // works when hovering device cards.
+        if (DevicesScrollViewer is null)
+            return;
+
+        // Respect the user's OS setting where possible.
+        var lines = SystemParameters.WheelScrollLines;
+        if (lines <= 0)
+            lines = 3;
+
+        // 16 is a typical WPF line-height approximation (DIPs per line).
+        var delta = (e.Delta / 120.0) * lines * 16.0;
+
+        DevicesScrollViewer.ScrollToVerticalOffset(DevicesScrollViewer.VerticalOffset - delta);
+        e.Handled = true;
+    }
 }
