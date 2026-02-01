@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("NetPulse")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+15205f8af6abd98b9653072a597ba6611113671b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+98aa175fc3fb1b02c67be7b3e2a30cb17070246d")]
 [assembly: System.Reflection.AssemblyProductAttribute("NetPulse")]
 [assembly: System.Reflection.AssemblyTitleAttribute("NetPulse")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

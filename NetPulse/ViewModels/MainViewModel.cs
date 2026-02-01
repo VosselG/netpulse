@@ -23,6 +23,11 @@ public partial class MainViewModel : ObservableObject
     private CancellationTokenSource? _monitoringCts;
     private Task? _monitoringTask;
 
+    private CancellationTokenSource? _autoPruneCts;
+    private Task? _autoPruneTask;
+
+    private CancellationTokenSource? _transientStatusCts;
+
     // Requested change: reduce flapping
     private const int OfflineAfterConsecutiveMisses = 10;
 
@@ -51,6 +56,15 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool hasOfflineDevices;
 
+    [ObservableProperty]
+    private bool isSettingsOpen;
+
+    [ObservableProperty]
+    private bool autoPruneEnabled;
+
+    [ObservableProperty]
+    private int autoPruneDays = 3;
+
     // IMPORTANT: Do not bind both ListBoxes directly to SelectedDevice.
     // They will fight and can clear selection because the selected item isn't in the other list.
     [ObservableProperty]
@@ -75,6 +89,27 @@ public partial class MainViewModel : ObservableObject
     private string scanStatusText = string.Empty;
 
     private bool _syncingSelection;
+    private bool _isClampingAutoPruneDays;
+
+    partial void OnAutoPruneDaysChanged(int value)
+    {
+        if (_isClampingAutoPruneDays)
+            return;
+
+        if (value >= 1)
+            return;
+
+        // Clamp using the generated property (recommended by MVVM Toolkit) and guard recursion.
+        _isClampingAutoPruneDays = true;
+        try
+        {
+            AutoPruneDays = 1;
+        }
+        finally
+        {
+            _isClampingAutoPruneDays = false;
+        }
+    }
 
     public MainViewModel(
         IPersistenceService persistenceService,
@@ -263,6 +298,9 @@ public partial class MainViewModel : ObservableObject
     {
         Settings = await _persistenceService.LoadSettingsAsync(cancellationToken);
 
+        AutoPruneEnabled = Settings.AutoPruneEnabled;
+        AutoPruneDays = Settings.AutoPruneDays;
+
         var devices = await _persistenceService.LoadDevicesAsync(cancellationToken);
         Devices.Clear();
 
@@ -275,16 +313,28 @@ public partial class MainViewModel : ObservableObject
             Devices.Add(d);
         }
 
+        // Startup auto-prune (only if enabled).
+        PruneDevicesCore(force: false);
+
         ScanProgressPercent = 0;
         ScanStatusText = string.Empty;
 
         RefreshViewsAndSectionState();
         StartMonitoring();
+        StartAutoPruneScheduler();
     }
 
     public async Task ShutdownAsync(CancellationToken cancellationToken)
     {
+        _transientStatusCts?.Cancel();
+        _transientStatusCts?.Dispose();
+        _transientStatusCts = null;
+
+        await StopAutoPruneSchedulerAsync(cancellationToken);
         await StopMonitoringAsync(cancellationToken);
+
+        Settings.AutoPruneEnabled = AutoPruneEnabled;
+        Settings.AutoPruneDays = AutoPruneDays;
 
         // Persist only what should be persisted (transient properties are [JsonIgnore]).
         await _persistenceService.SaveDevicesAsync(Devices, cancellationToken);
@@ -324,6 +374,70 @@ public partial class MainViewModel : ObservableObject
             _monitoringCts.Dispose();
             _monitoringCts = null;
             _monitoringTask = null;
+        }
+    }
+
+    private void StartAutoPruneScheduler()
+    {
+        if (_autoPruneTask is not null)
+            return;
+
+        _autoPruneCts = new CancellationTokenSource();
+        var ct = _autoPruneCts.Token;
+
+        _autoPruneTask = Task.Run(() => AutoPruneLoopAsync(ct), ct);
+    }
+
+    private async Task StopAutoPruneSchedulerAsync(CancellationToken cancellationToken)
+    {
+        if (_autoPruneCts is null || _autoPruneTask is null)
+            return;
+
+        try
+        {
+            _autoPruneCts.Cancel();
+
+            // Best effort: don't hang shutdown forever.
+            var completed = await Task.WhenAny(_autoPruneTask, Task.Delay(TimeSpan.FromSeconds(2), cancellationToken));
+            _ = completed; // intentionally ignored
+        }
+        catch
+        {
+            // best effort shutdown
+        }
+        finally
+        {
+            _autoPruneCts.Dispose();
+            _autoPruneCts = null;
+            _autoPruneTask = null;
+        }
+    }
+
+    private async Task AutoPruneLoopAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromHours(24));
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                try
+                {
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        PruneDevicesCore(force: false);
+                    });
+                }
+                catch
+                {
+                    // If dispatcher/app is shutting down, exit loop.
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // expected
         }
     }
 
@@ -592,6 +706,107 @@ public partial class MainViewModel : ObservableObject
         }
 
         return null;
+    }
+
+    private int PruneDevicesCore(bool force)
+    {
+        if (!force && !AutoPruneEnabled)
+            return 0;
+
+        var days = AutoPruneDays < 1 ? 1 : AutoPruneDays;
+        var cutoffUtc = DateTime.UtcNow.AddDays(-days);
+
+        static DateTime ToComparableUtc(DateTime dt)
+        {
+            if (dt == DateTime.MinValue)
+                return DateTime.MinValue;
+
+            return dt.Kind switch
+            {
+                DateTimeKind.Utc => dt,
+                DateTimeKind.Unspecified => DateTime.SpecifyKind(dt, DateTimeKind.Utc),
+                _ => dt.ToUniversalTime()
+            };
+        }
+
+        var toRemove = Devices
+            .Where(d =>
+                !d.IsOnline &&
+                d.LastSeen != DateTime.MinValue &&
+                ToComparableUtc(d.LastSeen) < cutoffUtc)
+            .ToList();
+
+        if (toRemove.Count == 0)
+            return 0;
+
+        foreach (var d in toRemove)
+        {
+            if (ReferenceEquals(SelectedDevice, d))
+                SelectedDevice = null;
+
+            Devices.Remove(d);
+        }
+
+        RefreshViewsAndSectionState();
+        return toRemove.Count;
+    }
+
+    private async Task SetTransientStatusAsync(string message, TimeSpan duration)
+    {
+        ScanStatusText = message;
+
+        _transientStatusCts?.Cancel();
+        _transientStatusCts?.Dispose();
+        _transientStatusCts = new CancellationTokenSource();
+
+        var token = _transientStatusCts.Token;
+
+        try
+        {
+            await Task.Delay(duration, token).ConfigureAwait(false);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        try
+        {
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                // Don't wipe scan status mid-scan.
+                if (!IsScanning && string.Equals(ScanStatusText, message, StringComparison.Ordinal))
+                    ScanStatusText = string.Empty;
+            });
+        }
+        catch
+        {
+            // ignore shutdown races
+        }
+    }
+
+    [RelayCommand]
+    private void ToggleSettings()
+    {
+        IsSettingsOpen = !IsSettingsOpen;
+    }
+
+    [RelayCommand]
+    private async Task PruneNowAsync()
+    {
+        int removed;
+
+        try
+        {
+            removed = await Application.Current.Dispatcher.InvokeAsync(() => PruneDevicesCore(force: true));
+        }
+        catch (Exception ex)
+        {
+            await SetTransientStatusAsync($"Prune failed: {ex.Message}", TimeSpan.FromSeconds(5));
+            return;
+        }
+
+        await SetTransientStatusAsync($"Pruned {removed} devices", TimeSpan.FromSeconds(5));
     }
 
     [RelayCommand]

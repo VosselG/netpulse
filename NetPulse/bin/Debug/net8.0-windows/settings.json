@@ -1,4 +1,4 @@
 {
-  "AutoPruneEnabled": false,
-  "AutoPruneDays": 3
+  "AutoPruneEnabled": true,
+  "AutoPruneDays": 2
 }

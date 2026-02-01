@@ -33,19 +33,30 @@
                        VerticalAlignment="Center"
                        Margin="0,0,16,0"/>
 
-            <Button DockPanel.Dock="Right"
-                    Content="Scan"
-                    Command="{Binding ScanCommand}">
-                <Button.Style>
-                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsScanning}" Value="True">
-                                <Setter Property="IsEnabled" Value="False"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Button.Style>
-            </Button>
+            <StackPanel DockPanel.Dock="Right"
+                        Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Margin="0,0,0,0">
+                <Button Content="Scan"
+                        Command="{Binding ScanCommand}"
+                        Background="{DynamicResource AccentBrush}"
+                        Foreground="{DynamicResource AppBackgroundBrush}"
+                        BorderBrush="{DynamicResource AccentBrush}"
+                        Margin="0,0,8,0">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsScanning}" Value="True">
+                                    <Setter Property="IsEnabled" Value="False"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+
+                <Button Content="Settings"
+                        Command="{Binding ToggleSettingsCommand}" />
+            </StackPanel>
 
             <StackPanel Orientation="Vertical" Margin="0,0,16,0">
                 <TextBlock Text="{Binding ScanStatusText}"
@@ -393,6 +404,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <TextBlock Text="Details"
@@ -477,6 +489,54 @@
                         </DataTemplate>
                     </ContentControl.ContentTemplate>
                 </ContentControl>
+
+                <!-- Settings -->
+                <Border Grid.Row="2"
+                        Background="{DynamicResource Surface2Brush}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="10"
+                        Padding="10"
+                        Margin="0,12,0,0">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsSettingsOpen}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+
+                    <StackPanel>
+                        <TextBlock Text="Settings"
+                                   Foreground="{DynamicResource TextBrush}"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,0,8"/>
+
+                        <CheckBox Content="Enable Auto-Prune"
+                                  IsChecked="{Binding AutoPruneEnabled, Mode=TwoWay}"
+                                  Foreground="{DynamicResource TextBrush}"
+                                  Margin="0,0,0,8"/>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="Auto-prune after"
+                                       Foreground="{DynamicResource TextBrush}"
+                                       VerticalAlignment="Center"/>
+                            <TextBox Width="54"
+                                     Margin="8,0,8,0"
+                                     Text="{Binding AutoPruneDays, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                            <TextBlock Text="days offline"
+                                       Foreground="{DynamicResource TextBrush}"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <Button Content="Prune now"
+                                Command="{Binding PruneNowCommand}"
+                                HorizontalAlignment="Left" />
+                    </StackPanel>
+                </Border>
             </Grid>
         </Border>
     </Grid>
