@@ -4,17 +4,17 @@
     "IpAddress": "192.168.18.1",
     "Vendor": "",
     "Hostname": "Beacon",
-    "LastSeen": "2026-02-01T06:19:42.46899Z",
+    "LastSeen": "2026-02-01T22:49:57.5948808Z",
     "IsOnline": true,
-    "LastLatencyMs": 2
+    "LastLatencyMs": 3
   },
   {
     "MacAddress": "FC:03:9F:1A:54:10",
     "IpAddress": "192.168.18.15",
     "Vendor": "",
     "Hostname": "",
-    "LastSeen": "2026-02-01T06:19:42.46899Z",
-    "IsOnline": true,
+    "LastSeen": "2026-02-01T22:46:09.8041879Z",
+    "IsOnline": false,
     "LastLatencyMs": null
   },
   {
@@ -22,7 +22,7 @@
     "IpAddress": "192.168.18.24",
     "Vendor": "",
     "Hostname": "taif",
-    "LastSeen": "2026-02-01T06:19:42.46899Z",
+    "LastSeen": "2026-02-01T22:49:57.5948808Z",
     "IsOnline": true,
     "LastLatencyMs": 0
   },
@@ -31,27 +31,27 @@
     "IpAddress": "192.168.18.7",
     "Vendor": "",
     "Hostname": "",
-    "LastSeen": "2026-02-01T05:39:53.3016457Z",
+    "LastSeen": "2026-02-01T22:46:19.5986887Z",
     "IsOnline": false,
     "LastLatencyMs": null
   },
   {
-    "MacAddress": "",
+    "MacAddress": "AA:0D:88:E8:34:50",
     "IpAddress": "192.168.18.8",
     "Vendor": "",
     "Hostname": "",
-    "LastSeen": "2026-02-01T01:41:32.2978077Z",
-    "IsOnline": false,
-    "LastLatencyMs": null
+    "LastSeen": "2026-02-01T22:49:57.5948808Z",
+    "IsOnline": true,
+    "LastLatencyMs": 112
   },
   {
     "MacAddress": "00:41:0E:E4:48:F0",
     "IpAddress": "192.168.18.14",
     "Vendor": "",
     "Hostname": "BRW00410EE448F0.local",
-    "LastSeen": "2026-02-01T06:19:42.46899Z",
-    "IsOnline": true,
-    "LastLatencyMs": 13
+    "LastSeen": "2026-02-01T22:46:19.5986887Z",
+    "IsOnline": false,
+    "LastLatencyMs": null
   },
   {
     "MacAddress": "3E:ED:0D:18:28:3E",
@@ -67,8 +67,8 @@
     "IpAddress": "192.168.18.2",
     "Vendor": "",
     "Hostname": "",
-    "LastSeen": "2026-02-01T06:19:10.4736759Z",
-    "IsOnline": false,
+    "LastSeen": "2026-02-01T22:49:57.5948808Z",
+    "IsOnline": true,
     "LastLatencyMs": null
   },
   {
@@ -86,7 +86,7 @@
     "Vendor": "",
     "Hostname": "",
     "LastSeen": "2026-02-01T06:19:26.4792767Z",
-    "IsOnline": true,
+    "IsOnline": false,
     "LastLatencyMs": null
   },
   {
@@ -95,8 +95,8 @@
     "Vendor": "",
     "Hostname": "",
     "LastSeen": "2026-02-01T06:19:42.46899Z",
-    "IsOnline": true,
-    "LastLatencyMs": 3
+    "IsOnline": false,
+    "LastLatencyMs": null
   },
   {
     "MacAddress": "F6:4A:14:E3:6C:72",
@@ -139,8 +139,8 @@
     "IpAddress": "192.168.18.23",
     "Vendor": "",
     "Hostname": "",
-    "LastSeen": "2026-02-01T06:19:42.46899Z",
+    "LastSeen": "2026-02-01T22:49:43.6048854Z",
     "IsOnline": true,
-    "LastLatencyMs": 117
+    "LastLatencyMs": 108
   }
 ]

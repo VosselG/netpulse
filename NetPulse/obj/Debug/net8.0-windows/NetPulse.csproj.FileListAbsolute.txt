@@ -51,3 +51,7 @@ C:\Users\taifalbadri\Desktop\proj_scanner\NetPulse\obj\Debug\net8.0-windows\NetP
 C:\Users\taifalbadri\Desktop\proj_scanner\NetPulse\obj\Debug\net8.0-windows\ref\NetPulse.dll
 C:\Users\taifalbadri\Desktop\proj_scanner\NetPulse\obj\Debug\net8.0-windows\NetPulse_Content.g.cs
 C:\Users\taifalbadri\Desktop\proj_scanner\NetPulse\bin\Debug\net8.0-windows\Resources\manuf
+C:\Users\taifalbadri\Desktop\proj_scanner\NetPulse\obj\Debug\net8.0-windows\Views\Controls\LatencyGraph.baml
+C:\Users\taifalbadri\Desktop\proj_scanner\NetPulse\obj\Debug\net8.0-windows\Views\Controls\LatencyGraph.g.cs
+C:\Users\taifalbadri\Desktop\proj_scanner\NetPulse\obj\Debug\net8.0-windows\GeneratedInternalTypeHelper.g.cs
+C:\Users\taifalbadri\Desktop\proj_scanner\NetPulse\obj\Debug\net8.0-windows\NetPulse_MarkupCompile.lref

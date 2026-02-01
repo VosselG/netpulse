@@ -627,16 +627,20 @@ public partial class MainViewModel : ObservableObject
                                 // Only show latency if Ping succeeded.
                                 u.Device.LastLatencyMs = u.LatencyMs;
 
-                                if (u.LatencyMs.HasValue)
-                                {
-                                    u.Device.PingHistory.Add(new PingPoint(u.TimestampUtc, u.LatencyMs.Value));
-                                    while (u.Device.PingHistory.Count > PingHistoryMaxPoints)
-                                        u.Device.PingHistory.RemoveAt(0);
-                                }
+                                // Always add a point so the graph has a consistent timeline.
+                                // Use -1 as a sentinel meaning "no latency sample / gap".
+                                u.Device.PingHistory.Add(new PingPoint(u.TimestampUtc, u.LatencyMs ?? -1));
+                                while (u.Device.PingHistory.Count > PingHistoryMaxPoints)
+                                    u.Device.PingHistory.RemoveAt(0);
                             }
                             else
                             {
                                 u.Device.ConsecutiveMisses++;
+
+                                // Add a "gap" point (no latency sample) each tick while not present.
+                                u.Device.PingHistory.Add(new PingPoint(u.TimestampUtc, -1));
+                                while (u.Device.PingHistory.Count > PingHistoryMaxPoints)
+                                    u.Device.PingHistory.RemoveAt(0);
 
                                 if (u.Device.ConsecutiveMisses >= OfflineAfterConsecutiveMisses)
                                 {
