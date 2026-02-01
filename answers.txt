@@ -1,0 +1,5 @@
+1- with
+2- yes
+3- a few endpoints and you interpret.
+4- yes
+5- yes. If I choose html then we do html, if xaml then xaml.

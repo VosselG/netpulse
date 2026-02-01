@@ -1,0 +1,103 @@
+# Software Design Document: NetPulse
+
+## 1. Overview
+**NetPulse** is a high-performance local network visualization tool designed for the Windows Desktop platform using **.NET 8** and **WPF**. Unlike standard command-line utilities, NetPulse provides a modern, dark-mode graphical dashboard that allows users to visualize their local network, identify connected devices, and monitor their connectivity in real-time.
+
+## 2. Requirements
+
+### 2.1 Core Functionality
+*   **Discovery Mode (Active Scan):**
+    *   Triggered manually via a "Scan" button.
+    *   Performs an aggressive sweep of the local subnet (approx. 254 addresses).
+    *   **Performance Target:** Must complete a full scan in under **3 seconds** using multi-threading.
+*   **Monitoring Mode (Passive Heartbeat):**
+    *   Runs automatically in the background after discovery.
+    *   Pings only the *known* list of devices to update status and latency.
+    *   Does not flood the network with ARP requests.
+*   **Device Identity:**
+    *   Devices are uniquely identified by **MAC Address** to handle DHCP IP reassignment.
+    *   If a new device (new MAC) acquires an old IP, it appears as a separate card.
+
+### 2.2 Persistence & Lifecycle
+*   **Data Persistence:**
+    *   The device list (including "Last Seen" timestamps) is saved to a local file (`devices.json`) on application exit.
+    *   Data is restored upon application launch.
+*   **Device Loss Behavior:**
+    *   **Transient State:** Devices that go offline remain on the UI but change visually (e.g., dimmed/grayed out).
+    *   **Manual Deletion:** Users can manually remove specific devices.
+    *   **Auto-Prune Policy:** An optional setting to automatically delete devices that have been offline for more than **3 days** (configurable).
+
+## 3. Architecture
+
+### 3.1 Pattern & Framework
+*   **Framework:** C# / WPF / .NET 8.
+*   **Design Pattern:** **MVVM (Model-View-ViewModel)**.
+    *   **View:** `MainWindow.xaml` (Presentation only).
+    *   **ViewModel:** `MainViewModel.cs` (State management, ObservableCollections, Command handling).
+    *   **Model:** Data entities (`NetworkDevice`, `UserSettings`).
+
+### 3.2 Service Layer
+The application utilizes **Dependency Injection (DI)** to manage services, facilitating modularity and testing.
+*   **`IScannerService`:** Encapsulates raw networking logic (Ping, ARP, DNS).
+*   **`IPersistenceService`:** Handles the serialization and I/O of `devices.json`.
+
+### 3.3 Threading Strategy
+*   **Task Fan-Out:** The scanner generates ~254 `Ping.SendPingAsync` tasks simultaneously.
+*   **Aggregation:** Uses `Task.WhenAll` to await completion efficiently.
+*   **Thread Marshalling:** Background threads report results to the UI thread using the WPF `Dispatcher` to prevent cross-thread exceptions.
+
+## 4. Data Model
+
+### 4.1 Device Entity (`NetworkDevice`)
+Represents a single node on the network.
+*   **Persisted Properties** (Saved to disk):
+    *   `MacAddress` (String): **Primary Key**.
+    *   `IpAddress` (String): Last known IP.
+    *   `Vendor` (String): Manufacturer (e.g., "Apple").
+    *   `Hostname` (String): DNS name.
+    *   `LastSeen` (DateTime): Used for pruning logic.
+*   **Transient Properties** (In-memory only, `[JsonIgnore]`):
+    *   `IsOnline` (Boolean): Determines active vs. offline visual state.
+    *   `PingHistory` (Collection<PingPoint>): Recent latency data for graphs.
+
+### 4.2 Application Settings (`UserSettings`)
+*   `AutoPruneEnabled` (Boolean).
+*   `AutoPruneDays` (Integer): Default is 3.
+
+## 5. UX (User Experience)
+
+### 5.1 Dashboard Layout
+*   **Style:** Modern Dark Mode with blue accents.
+*   **Grid System:** Cards flow left-to-right in a responsive wrap panel.
+*   **Card Visuals:**
+    *   **Online:** Bright opacity, blue status indicator.
+    *   **Offline:** 50% opacity, grayed out.
+    *   **Content:** Device Name, IP Address, Vendor Icon.
+
+### 5.2 Interactions
+*   **Context Menu:** Right-clicking a card opens a menu with a **"Delete"** option.
+*   **Sidebar (Master-Detail):** Left-clicking a card opens the "Detail Sidebar" on the right.
+    *   Displays full MAC address.
+    *   Displays a real-time Latency Graph (Transient history).
+*   **Progress Feedback:** A deterministic Progress Bar (0-100%) appears during the Discovery scan.
+
+## 6. Testing
+*   **Unit Testing:** Facilitated by the Dependency Injection architecture.
+*   **Mocking:** `IScannerService` can be mocked to simulate network scans (e.g., returning a fixed list of devices) without requiring physical network access during development.
+
+## 7. Performance & Scalability
+*   **Parallelism:** The "under 3 seconds" requirement is achieved by avoiding sequential pings.
+*   **Graph Optimization:** `PingHistory` is transient to prevent `devices.json` from bloating over time, ensuring fast startup and low memory footprint.
+
+## 8. Integrations & External Systems
+*   **System.Net.NetworkInformation:** Used for ICMP Echo (Ping).
+*   **iphlpapi.dll:** Accessed via P/Invoke to read the system ARP cache for MAC address resolution.
+*   **MAC OUI Lookup:** Resolves Vendor names (can use a local lookup table or lightweight API).
+
+## 9. Operations & Maintenance
+*   **Local Storage:** The application relies on `devices.json` stored in the user's AppData or local directory.
+*   **Cleanup:** The "Auto-Prune" feature is the primary self-maintenance mechanism to prevent the device list from growing indefinitely.
+
+## 10. Open Questions and Future Work
+*   **Persistent Graphs:** Future versions may consider efficient time-series database storage (e.g., SQLite) to persist ping history across sessions.
+*   **Deep Packet Inspection:** Future versions could determine device type (Printer vs. Phone) more accurately than simple OUI lookup.
